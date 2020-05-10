@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Live win rate</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link id="favicon" rel="icon" type="image/x-icon"/>
+
+    <style>
+        .label {
+            font-size: 2.5rem;
+        }
+
+        .win-rate {
+            font-size: 8rem;
+        }
+
+        .container {
+            box-sizing: border-box;
+            padding: 1rem;
+            text-align: center;
+            position: fixed;
+            top: 50%;
+            left: 0;
+            width: 100%;
+            transform: translateY(-50%);
+            font-family: Arial, Helvetica, sans-serif;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="label">Win rate</div>
+    <div class="win-rate"></div>
+    <div class="disconnected-hint">
+        Disconnected.<br>
+        Could not connect to battle results server.<br>
+        Make sure that WoT is running and that the battle results server mod is installed correctly.<br>
+        Refresh this page to reconnect.
+    </div>
+</div>
+<script>
+    /*---- Constants -------------------------------------------*/
+
+    var ADDRESS = 'ws://localhost:61942';
+
+    var RANDOM_BATTLE = 1;
+    var GRAND_BATTLE = 24;
+
+    var WIN_RATE_COLORS = [
+        {from: 0, to: 45, color: [0, 0, 0]},
+        {from: 45, to: 47, color: [205, 51, 51]},
+        {from: 47, to: 49, color: [215, 121, 0]},
+        {from: 49, to: 52, color: [215, 182, 0]},
+        {from: 52, to: 54, color: [109, 149, 33]},
+        {from: 54, to: 56, color: [76, 118, 46]},
+        {from: 56, to: 60, color: [74, 146, 183]},
+        {from: 60, to: 65, color: [131, 87, 157]},
+        {from: 65, to: null, color: [90, 49, 117]},
+    ];
+
+
+    /*---- State -----------------------------------------------*/
+
+    var victories = 0;
+    var losses = 0;
+    var websocketDisconnected = false;
+
+    subscribe(ADDRESS, onResult, onDisconnected);
+    update();
+
+    function onResult(result) {
+        if (isRandomBattle(result)) {
+            var team = getTeam(result);
+            var winnerTeam = getWinnerTeam(result);
+
+            if (team === winnerTeam) {
+                victories++;
+            } else {
+                losses++;
+            }
+
+            update();
+        }
+    }
+
+    function onDisconnected() {
+        websocketDisconnected = true;
+        update();
+    }
+
+    function isRandomBattle(result) {
+        var battleType = result && result.common && result.common.bonusType;
+        return battleType === RANDOM_BATTLE || battleType === GRAND_BATTLE;
+    }
+
+    function getWinnerTeam(result) {
+        return result && result.common && result.common.winnerTeam;
+    }
+
+    function getTeam(result) {
+        return result && result.personal && result.personal.avatar && result.personal.avatar.team;
+    }
+
+
+    /*---- Rendering -------------------------------------------*/
+
+    function update() {
+        var winRate = victories / (victories + losses) * 100;
+        var winRateColor = lookupColor(winRate);
+
+        // update win rate text
+        var winRateEl = document.querySelector('.win-rate');
+        if (isNaN(winRate)) {
+            winRateEl.innerText = 'N/A'
+        } else {
+            winRateEl.innerText = winRate.toFixed(0) + '%';
+        }
+
+        // update page title
+        if (isNaN(winRate)) {
+            document.title = 'Win rate: N/A'
+        } else {
+            document.title = 'Win rate: ' + winRate.toFixed(0) + '%';
+        }
+
+        // update background color
+        document.body.style.backgroundColor = rgbToSting(winRateColor);
+        if (useWhiteText(winRateColor)) {
+            document.body.style.color = 'white';
+        } else {
+            document.body.style.color = 'black';
+        }
+
+        // update favicon
+        var canvas = document.createElement('canvas');
+        canvas.height = 16;
+        canvas.width = 16;
+        var ctx = canvas.getContext("2d");
+        ctx.beginPath();
+        ctx.rect(0, 0, 16, 16);
+        ctx.fillStyle = rgbToSting(winRateColor);
+        ctx.fill();
+        document.getElementById('favicon').href = canvas.toDataURL();
+
+        // show/hide disconnected hint
+        var disconnectedHintEl = document.querySelector('.disconnected-hint');
+        if (websocketDisconnected) {
+            disconnectedHintEl.style.display = 'block'
+        } else {
+            disconnectedHintEl.style.display = 'none'
+        }
+    }
+
+    function lookupColor(winRate) {
+        var foundEntry = find(WIN_RATE_COLORS, function (entry) {
+            return entry.from <= winRate && (entry.to === null || winRate < entry.to);
+        });
+
+        if (foundEntry) {
+            return foundEntry.color;
+        } else {
+            return [0, 0, 0];
+        }
+    }
+
+    function rgbToSting(rgb) {
+        return 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+    }
+
+    function useWhiteText(winRateColor) {
+        var brightness = (winRateColor[0] * 299 + winRateColor[1] * 587 + winRateColor[2] * 114) / 1000;
+        return brightness < 125;
+    }
+
+
+    /*---- Connection -----------------------------------------*/
+
+    function subscribe(address, resultCallback, disconnectedCallback) {
+        var ws = new WebSocket(address);
+
+        function onOpen() {
+            var message = [
+                {
+                    messageType: 'REPLAY',
+                    payload: {}
+                },
+                {
+                    messageType: 'SUBSCRIBE',
+                    payload: {},
+                },
+            ];
+            ws.send(JSON.stringify(message));
+        }
+
+        function onError() {
+            disconnectedCallback();
+        }
+
+        function onClose() {
+            disconnectedCallback();
+        }
+
+        function onMessage(event) {
+            var message = JSON.parse(event.data);
+            if (message.messageType === 'BATTLE_RESULT') {
+                resultCallback(message.payload.result);
+            } else if (message.messageType === 'ERROR') {
+                console.error('Protocol Error:', message.payload);
+            }
+        }
+
+        ws.addEventListener('open', onOpen);
+        ws.addEventListener('error', onError);
+        ws.addEventListener('close', onClose);
+        ws.addEventListener('message', onMessage);
+    }
+
+
+    /*---- Util -----------------------------------------------*/
+
+    function find(array, predicate) {
+        for (var i = 0; i < array.length; i++) {
+            var value = array[i];
+            if (predicate(value)) {
+                return value;
+            }
+        }
+    }
+</script>
+</body>
+</html>
