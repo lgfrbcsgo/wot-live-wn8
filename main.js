@@ -9,13 +9,13 @@
 const SERVER_ADDRESS = 'ws://localhost:61942';
 
 /**
- * The battle type of a random battle.
+ * The numeric battle type of a random battle.
  * @type {number}
  */
 const RANDOM_BATTLE = 1;
 
 /**
- * The battle type of a grand battle.
+ * The numeric battle type of a grand battle.
  * @type {number}
  */
 const GRAND_BATTLE = 24;
@@ -87,15 +87,15 @@ function onOpen() {
 /**
  * Called for every message which we receive through the websocket connection.
  * Parses the event data as JSON, and then
- *  - proceed with handling the received battle results, or
+ *  - proceed with handling the received battle result, or
  *  - log an error to the console in case the server responds with an error.
  * @param event {MessageEvent}
  */
 function onMessage(event) {
     const message = JSON.parse(event.data);
     if (message.messageType === 'BATTLE_RESULT') {
-        const result = message.payload.result;
-        onResult(result);
+        const battleResult = message.payload.result;
+        onBattleResult(battleResult);
     } else if (message.messageType === 'ERROR') {
         console.error('Protocol Error:', message.payload);
     }
@@ -104,14 +104,14 @@ function onMessage(event) {
 /**
  * Called for every battle result which we receive from the server.
  * Checks whether the result is a random battle, updates the victory and loss counters, and finally renders the page.
- * @param result
+ * @param battleResult {object}
  */
-function onResult(result) {
-    if (!isRandomBattle(result)) {
+function onBattleResult(battleResult) {
+    if (!isRandomBattle(battleResult)) {
         return
     }
 
-    if (isVictory(result)) {
+    if (isVictory(battleResult)) {
         victoryCount++;
     } else {
         lossCount++;
@@ -153,46 +153,46 @@ function render() {
 
 /**
  * Determines whether the battle result is a random battle of not.
- * @param result {object}
+ * @param battleResult {object}
  * @returns {boolean}
  */
-function isRandomBattle(result) {
-    const battleType = getBattleType(result);
+function isRandomBattle(battleResult) {
+    const battleType = getBattleType(battleResult);
     return battleType === RANDOM_BATTLE || battleType === GRAND_BATTLE;
 }
 
 /**
  * Returns the numeric battle type of a battle result
- * @param result {object}
+ * @param battleResult {object}
  * @returns {number}
  */
-function getBattleType(result) {
-    return result && result.common && result.common.bonusType;
+function getBattleType(battleResult) {
+    return battleResult && battleResult.common && battleResult.common.bonusType;
 }
 
 /**
  * Determines whether the battle result was a victory or a loss/draw.
- * @param result {object}
+ * @param battleResult {object}
  * @returns {boolean}
  */
-function isVictory(result) {
-    return getTeam(result) === getWinnerTeam(result);
+function isVictory(battleResult) {
+    return getTeam(battleResult) === getWinnerTeam(battleResult);
 }
 
 /**
  * Returns the number of the winner team from the battle result.
- * @param result {object}
+ * @param battleResult {object}
  * @returns {number}
  */
-function getWinnerTeam(result) {
-    return result && result.common && result.common.winnerTeam;
+function getWinnerTeam(battleResult) {
+    return battleResult && battleResult.common && battleResult.common.winnerTeam;
 }
 
 /**
  * Returns the number of the player's team from the battle result.
- * @param result {object}
+ * @param battleResult {object}
  * @returns {number}
  */
-function getTeam(result) {
-    return result && result.personal && result.personal.avatar && result.personal.avatar.team;
+function getTeam(battleResult) {
+    return battleResult && battleResult.personal && battleResult.personal.avatar && battleResult.personal.avatar.team;
 }
