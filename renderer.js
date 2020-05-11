@@ -42,7 +42,7 @@ export function renderContent(winRate, showDisconnectedHint) {
             <div class="win-rate">${renderWinRate(winRate)}</div>
             <div class="disconnected-hint">
                 Disconnected.<br>
-                Could not connect to battle results server.<br>
+                Could not connect to the battle results server.<br>
                 Make sure that WoT is running and that the battle results server mod is installed correctly.<br>
                 Refresh this page to reconnect.
             </div>
