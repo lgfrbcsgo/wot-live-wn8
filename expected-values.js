@@ -83,7 +83,7 @@ export function getExpectedDefencePoints(expectedValues) {
  * @returns {number}
  */
 export function getExpectedVictories(expectedValues) {
-    return expectedValues && expectedValues.expWinRate;
+    return expectedValues && expectedValues.expWinRate && expectedValues.expWinRate / 100;
 }
 
 /**
