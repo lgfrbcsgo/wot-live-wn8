@@ -1,4 +1,4 @@
-const EXPECTED_VALUES_URL = "https://static.modxvm.com/wn8-data-exp/json/wn8exp.json";
+const EXPECTED_VALUES_URL = 'https://static.modxvm.com/wn8-data-exp/json/wn8exp.json';
 
 let expectedValuesMapPromise = null;
 
