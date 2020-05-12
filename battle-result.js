@@ -11,7 +11,7 @@ const RANDOM_BATTLE = 1;
  */
 export function isRandomBattle(battleResult) {
     const battleType = getBattleType(battleResult);
-    return battleType === RANDOM_BATTLE || battleType === GRAND_BATTLE;
+    return battleType === RANDOM_BATTLE;
 }
 
 /**
