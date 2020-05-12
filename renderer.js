@@ -1,16 +1,16 @@
-import {lookupWinRateColor} from './colors.js';
+import {lookupWn8Color} from './colors.js';
 
 export function renderTitle(winRate) {
-    return `Win rate: ${renderWinRate(winRate)}`;
+    return `WN8: ${renderWn8(winRate)}`;
 }
 
-export function renderContent(winRate, showDisconnectedHint) {
-    const winRateColor = lookupWinRateColor(winRate)
+export function renderContent(wn8, showDisconnectedHint, showErrorFetchingExpectedValuesHint) {
+    const wn8Color = lookupWn8Color(wn8)
     return `
         <style>
             body {
-                color: ${useWhiteText(winRateColor) ? 'white' : 'black'};
-                background-color: ${renderColor(winRateColor)};
+                color: ${useWhiteText(wn8Color) ? 'white' : 'black'};
+                background-color: ${renderColor(wn8Color)};
             }
 
             .container {
@@ -36,22 +36,30 @@ export function renderContent(winRate, showDisconnectedHint) {
             .disconnected-hint {
                 display: ${showDisconnectedHint ? 'block' : 'none'};
             }
+            
+            .error-fetching-hint {
+                display: ${showErrorFetchingExpectedValuesHint ? 'block' : 'none'};
+            }
         </style>
         <div class="container">
-            <div class="label">Win rate</div>
-            <div class="win-rate">${renderWinRate(winRate)}</div>
+            <div class="label">WN8</div>
+            <div class="win-rate">${renderWn8(wn8)}</div>
             <div class="disconnected-hint">
                 Disconnected.<br>
                 Could not connect to the battle results server.<br>
                 Make sure that WoT is running and that the battle results server mod is installed correctly.<br>
                 Refresh this page to reconnect.
             </div>
+            <div class="error-fetching-hint">
+                Could not fetch the WN8 expected values.<br>
+                Refresh this page to retry.
+            </div>
         </div>
     `;
 }
 
 export function renderFavicon(winRate) {
-    const winRateColor = lookupWinRateColor(winRate);
+    const winRateColor = lookupWn8Color(winRate);
 
     const canvas = document.createElement('canvas');
     canvas.height = 16;
@@ -66,8 +74,8 @@ export function renderFavicon(winRate) {
     return canvas.toDataURL();
 }
 
-function renderWinRate(winRate) {
-    return isNaN(winRate) ? 'N/A' : `${(winRate * 100).toFixed(0)}%`;
+function renderWn8(wn8) {
+    return isNaN(wn8) ? 'N/A' : `${wn8.toFixed(0)}`;
 }
 
 function renderColor(rgb) {

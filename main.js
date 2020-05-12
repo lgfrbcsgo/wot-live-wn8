@@ -1,24 +1,8 @@
-// ============================================================================
-// CONSTANTS
-// ============================================================================
-
 /**
  * The address of the battle results websocket server.
  * @type {string}
  */
 const SERVER_ADDRESS = 'ws://localhost:61942';
-
-/**
- * The numeric battle type of a random battle.
- * @type {number}
- */
-const RANDOM_BATTLE = 1;
-
-/**
- * The numeric battle type of a grand battle.
- * @type {number}
- */
-const GRAND_BATTLE = 24;
 
 
 // ============================================================================
@@ -26,22 +10,76 @@ const GRAND_BATTLE = 24;
 // ============================================================================
 
 /**
+ * The amount of damage dealt within the current session.
+ * @type {number}
+ */
+let damageDealt = 0;
+
+/**
+ * The expected amount of damage dealt within the current session.
+ * @type {number}
+ */
+let expectedDamageDealt = 0;
+
+/**
+ * The amount of spots within the current session.
+ * @type {number}
+ */
+let spots = 0;
+
+/**
+ * The expected amount of spots within the current session.
+ * @type {number}
+ */
+let expectedSpots = 0;
+
+/**
+ * The amount of frags within the current session.
+ * @type {number}
+ */
+let frags = 0;
+
+/**
+ * The expected amount of frags within the current session.
+ * @type {number}
+ */
+let expectedFrags = 0;
+
+/**
+ * The amount of base defence point within the current session.
+ * @type {number}
+ */
+let defencePoints = 0;
+
+/**
+ * The expected amount of base defence point within the current session.
+ * @type {number}
+ */
+let expectedDefencePoints = 0;
+
+/**
  * The count of victories within the current session.
  * @type {number}
  */
-let victoryCount = 0;
+let victories = 0;
 
 /**
- * The count of losses and draws within the current session.
+ * The expected count of victories within the current session.
  * @type {number}
  */
-let lossCount = 0;
+let expectedVictories = 0;
 
 /**
  * Boolean flag whether we must show a hint that we're disconnected from the websocket server.
  * @type {boolean}
  */
 let showDisconnectedHint = false;
+
+/**
+ * Boolean flag whether we must show a hint that we could not fetch the expected values.
+ * @type {boolean}
+ */
+let showErrorFetchingExpectedValuesHint = false;
 
 
 // ============================================================================
@@ -101,28 +139,86 @@ function onMessage(event) {
     }
 }
 
+import {isRandomBattle} from './battle-result.js';
+import {fetchExpectedValuesCached} from './expected-values.js';
+
 /**
  * Called for every battle result which we receive from the server.
- * Checks whether the result is a random battle, updates the victory and loss counters, and finally renders the page.
+ * Checks whether the result is a random battle, waits for the expected values to be loaded,
+ * then updates the state and renders.
  * @param battleResult {object}
  */
 function onBattleResult(battleResult) {
-    if (!isRandomBattle(battleResult)) {
-        return
+    if (isRandomBattle(battleResult)) {
+        fetchExpectedValuesCached()
+            .then(expectedValues => onRandomBattleResult(battleResult, expectedValues))
+            .catch(onErrorFetchingExpectedValues);
+    }
+}
+
+import {
+    getVehicleId,
+    getVehicle,
+    getDamageDealt,
+    getSpots,
+    getFrags,
+    getDefencePoints,
+    isVictory,
+} from './battle-result.js';
+import {
+    getExpectedValues,
+    getExpectedDamageDealt,
+    getExpectedSpots,
+    getExpectedFrags,
+    getExpectedDefencePoints,
+    getExpectedVictories
+} from './expected-values.js';
+
+/**
+ * Called for every random battle result which we receive.
+ * Only called after the expected values have been loaded.
+ * @param battleResult {object}
+ * @param expectedValuesMap {object}
+ */
+function onRandomBattleResult(battleResult, expectedValuesMap) {
+    const vehicleId = getVehicleId(battleResult);
+    const vehicle = getVehicle(battleResult, vehicleId);
+    const expectedValues = getExpectedValues(expectedValuesMap, vehicleId);
+
+    if (!vehicle || !expectedValues) {
+        return;  // no or unknown vehicle
     }
 
-    if (isVictory(battleResult)) {
-        victoryCount++;
-    } else {
-        lossCount++;
-    }
+    damageDealt += getDamageDealt(vehicle);
+    expectedDamageDealt += getExpectedDamageDealt(expectedValues);
+
+    spots += getSpots(vehicle);
+    expectedSpots += getExpectedSpots(expectedValues);
+
+    frags += getFrags(vehicle);
+    expectedFrags += getExpectedFrags(expectedValues);
+
+    defencePoints += getDefencePoints(vehicle);
+    expectedDefencePoints += getExpectedDefencePoints(expectedValues);
+
+    victories += isVictory(battleResult) ? 1 : 0;
+    expectedVictories += getExpectedVictories(expectedValues);
 
     render();
 }
 
 /**
+ * Called when we couldn't fetch the expected values.
+ * Set the flag to show a hint to the user and rerender.
+ */
+function onErrorFetchingExpectedValues() {
+    showErrorFetchingExpectedValuesHint = true;
+    render();
+}
+
+/**
  * Called when we couldn't connect to the server, or when the connection was closed.
- * Set the flag to show a hint to the user that we are disconnected from the server.
+ * Set the flag to show a hint to the user that we are disconnected from the server and rerender.
  */
 function onDisconnect() {
     showDisconnectedHint = true;
@@ -134,65 +230,50 @@ function onDisconnect() {
 // RENDERING
 // ============================================================================
 
+/**
+ * Helper function for normalizing stats according to WN8 spec.
+ * See https://wiki.wargaming.net/en/Player_Ratings_(WoT)#Step_2
+ * @param rSTAT
+ * @param constant
+ * @returns {number}
+ */
+function normalizeValue(rSTAT, constant) {
+    return (rSTAT - constant) / (1 - constant);
+}
+
+/**
+ * Calculates WN8 based on the current state.
+ * See https://wiki.wargaming.net/en/Player_Ratings_(WoT)#The_Steps_of_WN8_-_The_Formula
+ * @returns {number}
+ */
+function calculateWn8() {
+    const rDAMAGE = damageDealt / expectedDamageDealt;
+    const rSPOT = spots / expectedSpots;
+    const rFRAG = frags / expectedFrags;
+    const rDEF = defencePoints / expectedDefencePoints;
+    const rWIN = victories / expectedVictories;
+
+    const rWINc = Math.max(0, normalizeValue(rWIN, 0.71));
+    const rDAMAGEc = Math.max(0, normalizeValue(rDAMAGE, 0.22));
+    const rFRAGc = Math.max(0, Math.min(rDAMAGEc + 0.2, normalizeValue(rFRAG, 0.12)));
+    const rSPOTc = Math.max(0, Math.min(rDAMAGEc + 0.1, normalizeValue(rSPOT, 0.38)));
+    const rDEFc = Math.max(0, Math.min(rDAMAGEc + 0.1, normalizeValue(rDEF, 0.1)));
+
+    return 980 * rDAMAGEc
+        + 210 * rDAMAGEc * rFRAGc
+        + 155 * rFRAGc * rSPOTc
+        + 75 * rDEFc * rFRAGc
+        + 145 * Math.min(1.8, rWINc);
+}
+
 import {renderTitle, renderContent, renderFavicon} from './renderer.js';
 
 /**
- * Calculates the current win rate and updates the page based on the current state.
+ * Updates the page based on the current state.
  */
 function render() {
-    const winRate = victoryCount / (lossCount + victoryCount);
-    document.title = renderTitle(winRate);
-    document.body.innerHTML = renderContent(winRate, showDisconnectedHint);
-    document.querySelector('#favicon').href = renderFavicon(winRate);
-}
-
-
-// ============================================================================
-// BATTLE RESULT PARSING
-// ============================================================================
-
-/**
- * Determines whether the battle result is a random battle of not.
- * @param battleResult {object}
- * @returns {boolean}
- */
-function isRandomBattle(battleResult) {
-    const battleType = getBattleType(battleResult);
-    return battleType === RANDOM_BATTLE || battleType === GRAND_BATTLE;
-}
-
-/**
- * Returns the numeric battle type of a battle result
- * @param battleResult {object}
- * @returns {number}
- */
-function getBattleType(battleResult) {
-    return battleResult && battleResult.common && battleResult.common.bonusType;
-}
-
-/**
- * Determines whether the battle result was a victory or a loss/draw.
- * @param battleResult {object}
- * @returns {boolean}
- */
-function isVictory(battleResult) {
-    return getTeam(battleResult) === getWinnerTeam(battleResult);
-}
-
-/**
- * Returns the number of the winner team from the battle result.
- * @param battleResult {object}
- * @returns {number}
- */
-function getWinnerTeam(battleResult) {
-    return battleResult && battleResult.common && battleResult.common.winnerTeam;
-}
-
-/**
- * Returns the number of the player's team from the battle result.
- * @param battleResult {object}
- * @returns {number}
- */
-function getTeam(battleResult) {
-    return battleResult && battleResult.personal && battleResult.personal.avatar && battleResult.personal.avatar.team;
+    const wn8 = calculateWn8();
+    document.title = renderTitle(wn8);
+    document.body.innerHTML = renderContent(wn8, showDisconnectedHint, showErrorFetchingExpectedValuesHint);
+    document.querySelector('#favicon').href = renderFavicon(wn8);
 }
